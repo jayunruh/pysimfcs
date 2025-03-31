@@ -5,6 +5,7 @@ import scipy.ndimage as ndi
 import pandas as pd
 import scipy.special as ss
 import scipy.signal as ssig
+import matplotlib.pyplot as plt
 
 # here are some global variables or some definitions to be set for analysis
 psftype='3dgaussian'
@@ -45,6 +46,23 @@ def autocorr2d(img):
     corr=corr/(img.shape[0]*img.shape[1]*(img.mean()**2))-1
     return fft.fftshift(corr)
 
+def carpetstics(carpet):
+    '''
+    calcalate the spatial autocorrelation using the fft
+    undo the fftshift along the temporal axis
+    '''
+    return fft.fftshift(autocorr2d(carpet),axes=[0])
+
+def paircorrelation(carpet,shift=4):
+    '''
+    calculate the cross corr from each line to neighbor shift lines away
+    '''
+    xpts=carpet.shape[-1]
+    corrpts=xpts-shift
+    #now calculate the pair correlation functions
+    pcf=np.array([crosscorr(carpet[:,i],carpet[:,(i+shift)]) for i in range(corrpts)]).T
+    return pcf
+
 def crosscorr(traj1,traj2):
     '''
     calcalate the fcs autocorrelation using the fft
@@ -75,13 +93,6 @@ def avgquadrants(img):
     ll=np.roll(np.flipud(img.copy()),shift=1,axis=0)
     both=np.roll(np.flipud(np.fliplr(img.copy())),shift=(1,1),axis=(0,1))
     avgd=0.25*(img.copy()+ur+ll+both)
-    #hsize=img.shape[0]//2
-    #order is upper left, upper right, lower right, lower left
-    #quad=0.25*(img[:hsize,:hsize]+np.fliplr(img[:hsize,hsize:])+np.fliplr(np.flipud(img[hsize:,hsize:]))+np.flipud(img[hsize:,:hsize]))
-    #avgd[:hsize,:hsize]=quad
-    #avgd[:hsize,hsize:]=np.fliplr(quad)
-    #avgd[hsize:,hsize:]=np.fliplr(np.flipud(quad))
-    #avgd[hsize:,:hsize]=np.flipud(quad)
     return avgd
 
 def bintraj(traj,binby):
@@ -107,6 +118,13 @@ def binmultilog(corr,tauwidth=8):
         binsize*=2
     return corr2[:pos],xvals[:pos]
 
+def carpetbml(carpetcorr):
+    '''
+    do a multilog binning of a carpet correlation
+    '''
+    carpetbml1=np.array([binmultilog(carpetcorr[:,i])[0] for i in range(carpetcorr.shape[1])]).T
+    binxvals=binmultilog(carpetcorr[:,0])[1]
+    return carpetbml1,binxvals
 
 ##########################################
 #here is the correlation fitting function
@@ -483,11 +501,39 @@ def polyContains(polygon,points):
     copy of the contains code from ImageJ FloatPolygon: https://imagej.nih.gov/ij/developer/source/ij/process/FloatPolygon.java.html
     polygon and points are numpy arrays of npts x [x,y] coordinates
     '''
-    inside=np.zeros(len(polygon),dtype=bool)
+    inside=np.zeros(len(points),dtype=bool)
     r1=np.roll(np.arange(polygon.shape[0]),-1)
-    y=points[:,1]
-    x=points[:,0]
+    x=points[:,1]
+    y=points[:,0]
     for i in range(polygon.shape[0]):
         mask=((polygon[i,0]>=y)!=(polygon[r1[i],0]>=y)) & (x>(polygon[r1[i],1]-polygon[i,1])*(y-polygon[i,0])/(polygon[r1[i],0]-polygon[i,0])+polygon[i,1])
         inside[mask]=~inside[mask]
     return inside
+
+##########################################
+#here are a few colormap functions
+##########################################
+
+def getncmap():
+    '''
+    #get the jet colormap with the under values set to white
+    '''
+    ncmap=plt.colormaps['jet']
+    ncmap.set_under([1,1,1,1])
+    return ncmap
+
+def getsinglecmap(color='green'):
+    '''
+    gets a single colormap as a linear segmented colormap by name
+    '''
+    colors={'blue':[1,0,0],'cyan':[1,1,0],
+            'green':[0,1,0],'yellow':[0,1,1],
+            'red':[0,0,1],'magenta':[1,0,1]}
+    if(color not in colors):
+        print('color not found')
+        return None
+    from matplotlib.colors import ListedColormap
+    cmax=colors[color]
+    ramp=np.arange(256)/256.0
+    clist=np.array([ramp*cmax[2],ramp*cmax[1],ramp*cmax[0]]).T
+    return ListedColormap(clist,name=color)
