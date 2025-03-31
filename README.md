@@ -19,7 +19,7 @@ Various jupyter notebooks are named according to their application.  The pysimfc
 * [sim_movie_analog.ipynb](sim_movie_analog.ipynb): Simulates camera movie data with an analog detector.
 * [n_and_b_analog.ipynb](n_and_b_analog.ipynb): Illustrates how to calculate N and B histograms and estimate the analog S parameter.
 * [carpet_stics_pcf.ipynb](carpet_stics_pcf.ipynb): Illustrates how to calculate spatiotemporal image correlation (STICS) and pair correlation functions (pCFs) from simulated camera data.
-* Still debugging: [fit_pch2d.ipynb](fit_pch2d.ipynb): Fit 2D PCH multicolor photon counting histograms.
+* [fit_pch2d.ipynb](fit_pch2d.ipynb): Fit 2D PCH multicolor photon counting histograms.
 
 ### Setup
 I have made an effort to rely only on a few libraries for these codes.  Those include:
