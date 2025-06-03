@@ -21,6 +21,12 @@ Various jupyter notebooks are named according to their application.  The pysimfc
 * [carpet_stics_pcf.ipynb](carpet_stics_pcf.ipynb): Illustrates how to calculate spatiotemporal image correlation (STICS) and pair correlation functions (pCFs) from simulated camera data.
 * [fit_pch2d.ipynb](fit_pch2d.ipynb): Fit 2D PCH multicolor photon counting histograms.
 
+I recently realized that my N&B simulation code didn't represent the experimental constraints very well as the simulated images are completely uniform.  I created a few extra notebooks to help with this:
+
+* [sim_movie_confined_bleaching.ipynb](sim_movie_confined_bleaching.ipynb): Simulates data with molecules confined to the movie center and implements poisson bleaching.
+* [stack_detrend_linear.pynb](stack_detrend_linear.pynb): Fits every pixel of a movie to a series of lines and subtracts them to detrend bleaching.
+* [n_and_b_single_channel.ipynb](n_and_b_single_channel.ipynb): A simpler single channel version of the N&B analysis above utilizing the confined detrended simulation data.
+
 ### Setup
 I have made an effort to rely only on a few libraries for these codes.  Those include:
 * numpy: For general array and matrix manipulation and FFTs

@@ -1,3 +1,4 @@
+#this module contains functions for simulating fluorescence fluctuation data
 from tqdm.notebook import tqdm
 import numpy as np
 import scipy.fft as fft
@@ -274,5 +275,101 @@ def runImageSimulation(ssimsettings,ssimspecies):
             allstack+=ssimsettings['background'][j]
         stack.append(addNoise(allstack,ssimsettings['noisemode']))
         coords=movemolecules2(coords,ssimsettings,ssimspecies)
+    #stack shape at this point should be frame x channel x line x xpos
+    return np.array(stack)
+
+##########################################
+#here are the confined diffusion versions
+##########################################
+
+def initSimConfined(ssimsettings,ssimspecies,startpix,endpix):
+    '''
+    initializes the coordinates for the simulation with positions between startpix and endpix
+    '''
+    coords=[]
+    for i in range(len(ssimspecies)):
+        scoords=np.array([np.random.uniform(startpix,endpix,ssimspecies[i]['N']),
+                          np.random.uniform(startpix,endpix,ssimspecies[i]['N']),
+                          np.random.uniform(startpix,endpix,ssimspecies[i]['N'])]).T
+        coords.append(scoords)
+    return coords
+
+def moveMoleculesConfined2(coords,ssimspecies,startpix,endpix):
+    '''
+    moves sets of molecules according to scaled simsettings and simspecies
+    here we confine movement between startpix and endpix
+    '''
+    coords2=[]
+    for i in range(len(coords)):
+        tcoords=moveMoleculesConfined(coords[i],ssimspecies[i]['D'],startpix,endpix)
+        coords2.append(tcoords)
+    return coords2
+
+def moveMoleculesConfined(coords,dscaled,startpix,endpix):
+    '''
+    update the coordinates according to the scaled diffusion coefficient (pixels squared per frame)
+    uses reflective boundary conditions at startpix and endpix
+    '''
+    coords2=coords.copy()
+    for i in range(3):
+        coords2[:,i]=np.random.normal(loc=coords[:,i],scale=np.sqrt(2.0*dscaled))
+    eboxpixels=np.array([endpix]*3).astype(float)
+    sboxpixels=np.array([startpix]*3).astype(float)
+    over0=(coords2[:,0]>=eboxpixels[0])
+    over1=(coords2[:,1]>=eboxpixels[1])
+    over2=(coords2[:,2]>=eboxpixels[2])
+    under0=(coords2[:,0]<sboxpixels[0])
+    under1=(coords2[:,1]<sboxpixels[0])
+    under2=(coords2[:,2]<sboxpixels[0])
+    coords2[over0,0]=2.0*eboxpixels[0]-coords2[over0,0]
+    coords2[under0,0]=2.0*sboxpixels[0]-coords2[under0,0]
+    coords2[over1,1]=2.0*eboxpixels[1]-coords2[over1,1]
+    coords2[under1,1]=2.0*sboxpixels[1]-coords2[under1,1]
+    coords2[over2,2]=2.0*eboxpixels[2]-coords2[over2,2]
+    coords2[under2,2]=2.0*sboxpixels[2]-coords2[under2,2]
+    return coords2
+
+def bleachMolecules(coords,bleachframeprob):
+    '''
+    removes bleached molecules from the coordinate set based on the bleaching probability (bleachframeprob)
+    '''
+    coords2=[]
+    for i in range(len(coords)):
+        notbleached=np.random.uniform(size=len(coords[i]))>bleachframeprob
+        coords2.append(coords[i][notbleached])
+    return coords2
+
+def runConfinedBleachingSim(ssimsettings,ssimspecies,bleachrate,startconfine=-1,endconfine=-1):
+    '''
+    run an image simulation with molecules confined to an internal square and poisson bleaching
+    bleachrate is in units of per second
+    return a multichannel stack
+    '''
+    if(startconfine<0):
+        start=ssimsettings['boxpixels']//4
+    else:
+        start=startconfine
+    if(endconfine<0):
+        end=start+ssimsettings['boxpixels']//2
+    else:
+        end=endconfine
+    coords=initSimConfined(ssimsettings,ssimspecies,start,end)
+    stack=[]
+    zpos=ssimsettings['boxpixels']//2
+    bleachrate2=bleachrate*ssimsettings['frametime']/1.0e+6
+    bleachframeprob=1.0-np.exp(-bleachrate2)
+    print('bleachframeprob',bleachframeprob)
+    for k in tqdm(range(ssimsettings['nframes'])):
+        popstack=[]
+        for j in range(len(coords)):
+            img=getPopImage(coords[j],zpos,ssimsettings,ssimspecies[j])
+            popstack.append(img)
+        allstack=np.array(popstack).sum(axis=0)
+        for j in range(len(ssimsettings['background'])):
+            allstack+=ssimsettings['background'][j]
+        stack.append(addNoise(allstack,ssimsettings['noisemode']))
+        coords=moveMoleculesConfined2(coords,ssimspecies,start,end)
+        #now handle the bleaching
+        coords=bleachMolecules(coords,bleachframeprob)
     #stack shape at this point should be frame x channel x line x xpos
     return np.array(stack)

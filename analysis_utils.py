@@ -1,3 +1,4 @@
+#this module contains functions for analyzing fluorescence fluctuation data
 #from tqdm.notebook import tqdm
 import numpy as np
 import scipy.fft as fft
@@ -407,8 +408,7 @@ def binomial(ntrue,trials,trueprob):
     '''
     calculate the binomial function
     '''
-    trifact=ss.factorial(trials)
-    return (trifact/(trifact*ss.factorial(trials-ntrue)))*(trueprob**ntrue)*((1.0-trueprob)**(trials-ntrue))
+    return (ss.factorial(trials)/(ss.factorial(ntrue)*ss.factorial(trials-ntrue)))*(trueprob**ntrue)*((1.0-trueprob)**(trials-ntrue))
 
 def singlespecies2d(brightnessa,brightnessb,number,nlength=20,klengtha=15,klengthb=15,psftype='3dgaussian'):
     '''
@@ -416,7 +416,7 @@ def singlespecies2d(brightnessa,brightnessb,number,nlength=20,klengtha=15,klengt
     nlength should be more than the maximum realistic number of molecules
     klength should be 1.5 times the total pch size in each dimension
     '''
-    temppch=np.array([klengtha+1,klengthb+1],dtype=np.float64)
+    #temppch=np.array([klengtha+1,klengthb+1],dtype=np.float64)
     #pchsingle=getpch(brightnessa+brightnessb,number,klength=(klengtha+klengthb))
     pchsingle=singlespecies(brightnessa+brightnessb,number,klength=(klengtha+klengthb),nlength=nlength)
     fbrighta=brightnessa/(brightnessa+brightnessb)
@@ -428,11 +428,8 @@ def convolve2d(mat1,mat2):
     do a non-fft 2d convolution
     assume matrices are the same shape
     '''
-    retmat=np.zeros(mat1.shape,dtype=np.float64)
-    for i in range(mat1.shape[0]):
-        for j in range(mat1.shape[1]):
-            retmat[i,j]=np.array([mat1[k,l]*mat2[i-k,j-l] for l in range(j+1) for k in range(i+1)]).sum()
-    return retmat
+    retmat=[[np.array([mat1[k,l]*mat2[i-k,j-l] for l in range(j+1) for k in range(i+1)]).sum() for j in range(mat1.shape[1])] for i in range(mat1.shape[0])]
+    return np.array(retmat)
 
 def getpch2d(brightnessesa,brightnessesb,numbers,backgrounda,backgroundb,klengtha=10,klengthb=10,psftype='3dgaussian'):
     '''
@@ -496,6 +493,15 @@ def covar(inta,intb):
     '''
     return np.mean(inta*intb,axis=0)-np.mean(inta,axis=0)*np.mean(intb,axis=0)
 
+def gaussFilterNaN(arr,sigma):
+    '''
+    applies a gaussian filter to an array with nan values
+    convert the nans to zeros and then convert back to nan after smoothing
+    '''
+    sm=ndi.gaussian_filter(np.nan_to_num(arr),sigma)
+    sm[np.isnan(arr)]=np.nan
+    return sm
+
 def polyContains(polygon,points):
     '''
     copy of the contains code from ImageJ FloatPolygon: https://imagej.nih.gov/ij/developer/source/ij/process/FloatPolygon.java.html
@@ -509,6 +515,56 @@ def polyContains(polygon,points):
         mask=((polygon[i,0]>=y)!=(polygon[r1[i],0]>=y)) & (x>(polygon[r1[i],1]-polygon[i,1])*(y-polygon[i,0])/(polygon[r1[i],0]-polygon[i,0])+polygon[i,1])
         inside[mask]=~inside[mask]
     return inside
+
+##########################################
+#here are a some linear detrending functions
+##########################################
+
+def detrendStackLinearSeg(stack,segments,maintain_intensity=True):
+    '''
+    fits every pixel of a stack to a series of lines and subtracts it from the stack
+    if maintain intensity is true the average intensity of each line is added back
+    assumes a single channel image
+    '''
+    avgint=stack.mean(axis=0)
+    #divide the stack into segments in time for detrending
+    seglen=len(stack)//segments
+    subs=[]
+    for i in range(segments):
+        start=i*seglen
+        end=start+seglen
+        if(i==(segments-1)):
+            end=len(stack)
+        slopes,intercepts=getStackTrends(stack[start:end])
+        xvals=np.array(range(0,end-start))
+        trendstack=[[slopes[i,j]*xvals+intercepts[i,j] for j in range(stack.shape[2])] for i in range(stack.shape[1])]
+        sub=stack[start:end]-np.moveaxis(np.array(trendstack),2,0)
+        subs.append(sub)
+    if(segments>1):
+        sub=np.concatenate(subs,axis=0)
+    else:
+        sub=subs[0]
+    if(maintain_intensity):
+        sub+=stack.mean(axis=0)
+    return sub
+
+def getStackTrends(stack):
+    '''
+    fits every pixel of a stack to a line and returns the coefficients
+    note that intecept is (xsqsum*ysum-xsum*xysum)/(xsqsum*length-xsum*xsum)
+    and slope is (xysum*length-xsum*ysum)/(xsqsum*length-xsum*xsum)
+    returns slope and intercept arrays
+    '''
+    xvals=np.array(range(len(stack))).astype(float)
+    xsum=xvals.sum()
+    xsqsum=(xvals*xvals).sum()
+    ysums=stack.sum(axis=0).astype(float)
+    xysums=(stack*xvals.reshape(-1,1,1)).sum(axis=0).astype(float)
+    nslices=len(stack)
+    divisor=xsqsum*nslices-xsum*xsum
+    slopes=(xysums*nslices-ysums*xsum)/divisor
+    intercepts=(ysums*xsqsum-xysums*xsum)/divisor
+    return slopes,intercepts
 
 ##########################################
 #here are a few colormap functions
